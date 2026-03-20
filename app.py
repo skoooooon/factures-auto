@@ -4,8 +4,20 @@ import threading
 from flask import Flask, render_template, jsonify, request, send_from_directory
 from collector import run_collection
 from sender import send_to_pennylane
+from functools import wraps
+from flask import session, redirect, url_for, request
 
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "changez-moi")
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
 app.config["UPLOAD_FOLDER"] = "uploads"
 
 # État partagé entre les threads
@@ -20,7 +32,23 @@ def log(msg):
     state["logs"].append(msg)
     print(msg)
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        if request.form.get("password") == os.getenv("APP_PASSWORD", "changez-moi"):
+            session["logged_in"] = True
+            return redirect(url_for("index"))
+        error = "Mot de passe incorrect"
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 

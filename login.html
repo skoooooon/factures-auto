@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connexion — Factures Auto</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f0f; --surface: #181818; --border: #2a2a2a;
+      --text: #e8e6e0; --text-muted: #666; --accent: #d4a853;
+      --red: #e05555; --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+    }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 40px; width: 100%; max-width: 360px; }
+    .logo { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--accent); text-transform: uppercase; margin-bottom: 32px; }
+    label { font-size: 11px; font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 8px; }
+    input[type="password"] { width: 100%; background: #0a0a0a; border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; color: var(--text); font-family: var(--mono); font-size: 14px; outline: none; }
+    input[type="password"]:focus { border-color: var(--accent); }
+    .btn { width: 100%; margin-top: 16px; padding: 10px; background: rgba(212,168,83,0.12); color: var(--accent); border: 1px solid rgba(212,168,83,0.3); border-radius: 4px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+    .btn:hover { background: rgba(212,168,83,0.2); }
+    .error { margin-top: 12px; font-size: 12px; color: var(--red); font-family: var(--mono); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Factures / Auto</div>
+    <form method="POST">
+      <label>Mot de passe</label>
+      <input type="password" name="password" autofocus placeholder="••••••••">
+      <button class="btn" type="submit">Accéder</button>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    </form>
+  </div>
+</body>
+</html>
