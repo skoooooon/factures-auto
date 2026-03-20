@@ -30,6 +30,8 @@ UPLOAD_FOLDER = "uploads"
 INVOICE_KEYWORDS = [
     "facture", "invoice", "reçu", "receipt", "confirmation de paiement",
     "votre commande", "your order", "ticket", "justificatif",
+    "votre facture", "avis d'échéance", "relevé", "quittance",
+    "order confirmation", "your invoice", "payment confirmation",
 ]
 
 def get_gmail_service():
@@ -86,8 +88,10 @@ def collect_gmail(log, days_back=60):
         # Récupère les pièces jointes PDF
         parts = msg.get("payload", {}).get("parts", [])
         for part in parts:
-            if part.get("mimeType") != "application/pdf":
-                continue
+        mime = part.get("mimeType", "")
+        filename = part.get("filename", "")
+        if "pdf" not in mime.lower() and not filename.lower().endswith(".pdf"):
+            continue
 
             filename = part.get("filename", "facture.pdf")
             attachment_id = part.get("body", {}).get("attachmentId")
