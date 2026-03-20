@@ -88,10 +88,10 @@ def collect_gmail(log, days_back=60):
         # Récupère les pièces jointes PDF
         parts = msg.get("payload", {}).get("parts", [])
         for part in parts:
-        mime = part.get("mimeType", "")
-        filename = part.get("filename", "")
-        if "pdf" not in mime.lower() and not filename.lower().endswith(".pdf"):
-            continue
+            mime = part.get("mimeType", "")
+            filename = part.get("filename", "")
+            if "pdf" not in mime.lower() and not filename.lower().endswith(".pdf"):
+                continue
 
             filename = part.get("filename", "facture.pdf")
             attachment_id = part.get("body", {}).get("attachmentId")
