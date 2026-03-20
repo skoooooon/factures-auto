@@ -34,8 +34,15 @@ INVOICE_KEYWORDS = [
 
 def get_gmail_service():
     creds = None
-    if os.path.exists("token.json"):
+    
+    # Sur Railway : token stocké en variable d'environnement
+    gmail_token = os.getenv("GMAIL_TOKEN")
+    if gmail_token:
+        import json
+        creds = Credentials.from_authorized_user_info(json.loads(gmail_token), SCOPES)
+    elif os.path.exists("token.json"):
         creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
@@ -44,6 +51,7 @@ def get_gmail_service():
             creds = flow.run_local_server(port=0)
         with open("token.json", "w") as f:
             f.write(creds.to_json())
+    
     return build("gmail", "v1", credentials=creds)
 
 def collect_gmail(log, days_back=60):
