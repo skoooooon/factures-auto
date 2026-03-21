@@ -1,37 +1,35 @@
-"""
-Envoi des factures vers Pennylane
-──────────────────────────────────
-Pennylane accepte les factures via une adresse email dédiée.
-Trouvez cette adresse dans : Pennylane > Paramètres > Dépôt de documents
-
-Variables d'environnement Railway :
-  PENNYLANE_EMAIL   → adresse de dépôt Pennylane (ex: depot-xxxxx@pennylane.com)
-  SMTP_EMAIL        → votre adresse Gmail expéditrice
-  SMTP_PASSWORD     → mot de passe d'application Gmail (pas votre mdp principal !)
-                      Créer sur : myaccount.google.com > Sécurité > Mots de passe des applications
-
-Note : utilisez un "mot de passe d'application" Gmail, pas votre mot de passe Google.
-"""
-
 import os
-import smtplib
+import base64
 import traceback
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 from datetime import datetime
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
+SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+
+def get_gmail_send_service():
+    creds = None
+    gmail_token = os.getenv("GMAIL_TOKEN")
+    if gmail_token:
+        import json
+        creds = Credentials.from_authorized_user_info(json.loads(gmail_token), SCOPES)
+    elif os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    return build("gmail", "v1", credentials=creds)
 
 def send_to_pennylane(invoices, log):
     pennylane_email = os.getenv("PENNYLANE_EMAIL")
     smtp_email = os.getenv("SMTP_EMAIL")
-    smtp_password = os.getenv("SMTP_PASSWORD")
 
-    if not all([pennylane_email, smtp_email, smtp_password]):
-        raise ValueError(
-            "Variables manquantes : PENNYLANE_EMAIL, SMTP_EMAIL et/ou SMTP_PASSWORD"
-        )
+    if not all([pennylane_email, smtp_email]):
+        raise ValueError("Variables manquantes : PENNYLANE_EMAIL et/ou SMTP_EMAIL")
 
     log(f"📤 Envoi de {len(invoices)} facture(s) vers Pennylane...")
     log(f"   Expéditeur : {smtp_email}")
@@ -40,20 +38,13 @@ def send_to_pennylane(invoices, log):
     batches = _batch_invoices(invoices, max_size_mb=20)
     log(f"   {len(batches)} email(s) à envoyer")
 
+    service = get_gmail_send_service()
     sent_count = 0
     errors = []
 
     for i, batch in enumerate(batches, 1):
         try:
-            _send_email_batch(
-                smtp_email=smtp_email,
-                smtp_password=smtp_password,
-                to=pennylane_email,
-                batch=batch,
-                batch_num=i,
-                total_batches=len(batches),
-                log=log,
-            )
+            _send_email_batch(service, smtp_email, pennylane_email, batch, i, len(batches), log)
             sent_count += len(batch)
             for inv in batch:
                 log(f"   ✅ {inv['name']}")
@@ -70,7 +61,7 @@ def send_to_pennylane(invoices, log):
         log("   Votre comptable peut maintenant accéder aux factures sur Pennylane.")
 
 
-def _send_email_batch(smtp_email, smtp_password, to, batch, batch_num, total_batches, log):
+def _send_email_batch(service, smtp_email, to, batch, batch_num, total_batches, log):
     msg = MIMEMultipart()
     msg["From"] = smtp_email
     msg["To"] = to
@@ -89,7 +80,6 @@ def _send_email_batch(smtp_email, smtp_password, to, batch, batch_num, total_bat
     for inv in batch:
         body += f"  • {inv['name']} — {inv['source'].capitalize()} — {inv['date']}\n"
     body += "\nCordialement"
-
     msg.attach(MIMEText(body, "plain", "utf-8"))
 
     for inv in batch:
@@ -105,22 +95,17 @@ def _send_email_batch(smtp_email, smtp_password, to, batch, batch_num, total_bat
         part.add_header("Content-Disposition", f'attachment; filename="{safe_name}"')
         msg.attach(part)
 
-    log(f"   Connexion SMTP en cours...")
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
-        log(f"   Authentification...")
-        server.login(smtp_email, smtp_password)
-        log(f"   Envoi en cours...")
-        server.sendmail(smtp_email, to, msg.as_string())
-        log(f"   Email {batch_num}/{total_batches} envoyé ✓")
+    log(f"   Envoi via API Gmail...")
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    log(f"   Email {batch_num}/{total_batches} envoyé ✓")
 
 
 def _batch_invoices(invoices, max_size_mb=20):
-    """Découpe la liste en batches pour ne pas dépasser la limite de taille email."""
     max_bytes = max_size_mb * 1024 * 1024
     batches = []
     current_batch = []
     current_size = 0
-
     for inv in invoices:
         path = inv.get("path", "")
         size = os.path.getsize(path) if path and os.path.exists(path) else 0
@@ -130,8 +115,6 @@ def _batch_invoices(invoices, max_size_mb=20):
             current_size = 0
         current_batch.append(inv)
         current_size += size
-
     if current_batch:
         batches.append(current_batch)
-
     return batches
