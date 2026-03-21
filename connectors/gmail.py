@@ -120,7 +120,11 @@ def collect_gmail(log, days_back=60):
             if "pdf" not in mime.lower() and not filename.lower().endswith(".pdf"):
                 continue
 
-            filename = part.get("filename", "facture.pdf")
+            filename = part.get("filename", "") or ""
+            if not filename or filename.strip() == "":
+                filename = f"facture_{_parse_date(date_str).replace('/', '-')}.pdf"
+            if not filename.lower().endswith(".pdf"):
+                filename += ".pdf"
             attachment_id = part.get("body", {}).get("attachmentId")
             if not attachment_id:
                 continue
