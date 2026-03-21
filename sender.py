@@ -106,7 +106,7 @@ def _send_email_batch(smtp_email, smtp_password, to, batch, batch_num, total_bat
         msg.attach(part)
 
     log(f"   Connexion SMTP en cours...")
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as server:
         log(f"   Authentification...")
         server.login(smtp_email, smtp_password)
         log(f"   Envoi en cours...")
