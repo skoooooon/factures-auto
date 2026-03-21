@@ -16,6 +16,7 @@ import os
 import base64
 import uuid
 import re
+import unicodedata
 from datetime import datetime, timedelta
 
 from google.auth.transport.requests import Request
@@ -46,13 +47,14 @@ EXCLUDE_KEYWORDS = [
 
 # Expéditeurs bancaires à exclure
 EXCLUDE_SENDERS = [
-
+    "societegenerale", "bnpparibas", "creditmutuel", "lcl.fr",
+    "caisse-epargne", "labanquepostale", "boursorama", "fortuneo",
+    "ing.fr", "hsbc", "cic.fr", "bred.fr", "credit-agricole",
 ]
 
 def get_gmail_service():
     creds = None
     
-    # Sur Railway : token stocké en variable d'environnement
     gmail_token = os.getenv("GMAIL_TOKEN")
     if gmail_token:
         import json
@@ -71,6 +73,22 @@ def get_gmail_service():
     
     return build("gmail", "v1", credentials=creds)
 
+def _sanitize_filename(filename, fallback):
+    """Nettoie le nom de fichier en supprimant les caractères spéciaux."""
+    if not filename or not filename.strip():
+        return fallback
+    # Normalisation unicode + suppression des caractères non-ASCII
+    filename = unicodedata.normalize("NFKD", filename)
+    filename = filename.encode("ascii", "ignore").decode("ascii")
+    # Garder uniquement les caractères sûrs
+    filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
+    filename = filename.strip()
+    if not filename:
+        return fallback
+    if not filename.lower().endswith(".pdf"):
+        filename += ".pdf"
+    return filename
+
 def collect_gmail(log, days_back=60):
     """
     Scanne les X derniers jours de Gmail et récupère les PDFs de facturation.
@@ -78,13 +96,12 @@ def collect_gmail(log, days_back=60):
     service = get_gmail_service()
     invoices = []
 
-    # Requête Gmail : emails avec pièces jointes PDF des X derniers jours
     after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
-    query = f"has:attachment filename:pdf after:{after_date} -in:sent" 
+    query = f"has:attachment filename:pdf after:{after_date} -in:sent"
 
     log(f"   Recherche : {query}")
 
-    # Pagination pour récupérer tous les résultats (pas de limite à 100)
+    # Pagination pour récupérer tous les résultats
     messages = []
     page_token = None
     while True:
@@ -108,27 +125,25 @@ def collect_gmail(log, days_back=60):
         date_str = _get_header(msg, "Date") or ""
         sender = _get_header(msg, "From") or ""
 
-        # Filtre : est-ce une facture ?
         if not _is_invoice(subject, sender):
             continue
 
-        # Récupère les pièces jointes PDF
         parts = msg.get("payload", {}).get("parts", [])
         for part in parts:
-            log(f"   DEBUG part: mimeType={part.get('mimeType')} filename={part.get('filename')} size={part.get('body',{}).get('size')}")
             mime = part.get("mimeType", "")
-            filename = part.get("filename", "")
-            if "pdf" not in mime.lower() and not filename.lower().endswith(".pdf"):
+            raw_filename = part.get("filename", "")
+
+            if "pdf" not in mime.lower() and not raw_filename.lower().endswith(".pdf"):
                 continue
 
-            filename = part.get("filename", "") or ""
-            if not filename or filename.strip() == "":
-                filename = f"facture_{_parse_date(date_str).replace('/', '-')}.pdf"
-            if not filename.lower().endswith(".pdf"):
-                filename += ".pdf"
             attachment_id = part.get("body", {}).get("attachmentId")
             if not attachment_id:
                 continue
+
+            # Nettoyage du nom de fichier
+            date_label = _parse_date(date_str).replace("/", "-")
+            fallback = f"facture_{date_label}.pdf"
+            filename = _sanitize_filename(raw_filename, fallback)
 
             # Téléchargement
             attachment = service.users().messages().attachments().get(
@@ -143,7 +158,6 @@ def collect_gmail(log, days_back=60):
             with open(path, "wb") as f:
                 f.write(data)
 
-            # Détection de la source
             source = _detect_source(sender)
 
             invoices.append({
@@ -169,13 +183,10 @@ def _get_header(msg, name):
 
 def _is_invoice(subject, sender):
     text = (subject + " " + sender).lower()
-    # Exclure les expéditeurs bancaires
     if any(ex in text for ex in EXCLUDE_SENDERS):
         return False
-    # Exclure les objets non liés aux factures
     if any(ex in subject.lower() for ex in EXCLUDE_KEYWORDS):
         return False
-    # Doit contenir un mot-clé de facturation
     return any(kw in text for kw in INVOICE_KEYWORDS)
 
 def _detect_source(sender):
@@ -190,6 +201,7 @@ def _detect_source(sender):
         "sfr": "sfr",
         "bouygues": "bouygues",
         "boulanger": "boulanger",
+        "lidl": "lidl",
     }
     for key, val in sources.items():
         if key in sender_lower:
