@@ -1,15 +1,20 @@
 import os
+import json
 from connectors.gmail import collect_gmail
 from connectors.total import collect_total
 from connectors.aprr import collect_aprr
 from connectors.easyjet import collect_easyjet
-# Ajoutez vos connecteurs ici au fur et à mesure
+from connectors.dynamic import collect_dynamic
+
+CONNECTORS_FILE = "connectors_config.json"
+
+def load_dynamic_connectors():
+    if os.path.exists(CONNECTORS_FILE):
+        with open(CONNECTORS_FILE, "r") as f:
+            return json.load(f)
+    return []
 
 def run_collection(state, log):
-    """
-    Orchestre la collecte depuis toutes les sources.
-    Priorité : Gmail d'abord, puis scraping pour les manquants.
-    """
     log("🚀 Démarrage de la collecte...")
     os.makedirs("uploads", exist_ok=True)
 
@@ -24,20 +29,17 @@ def run_collection(state, log):
         log(f"❌ Gmail : erreur — {e}")
         gmail_invoices = []
 
-    # Sources déjà couvertes par Gmail (basé sur le champ "source")
     covered_sources = {inv["source"] for inv in state["invoices"]}
-    log(f"   Sources déjà couvertes : {covered_sources or 'aucune'}")
+    log(f"   Sources couvertes par Gmail : {covered_sources or 'aucune'}")
 
-    # ── 2. Connecteurs scraping ───────────────────────────────
-    scraping_connectors = [
+    # ── 2. Connecteurs statiques ───────────────────────────────
+    static_connectors = [
         ("Total",   collect_total,   "total"),
         ("APRR",    collect_aprr,    "aprr"),
         ("EasyJet", collect_easyjet, "easyjet"),
-        # ("Amazon",  collect_amazon,  "amazon"),
-        # ("Orange",  collect_orange,  "orange"),
     ]
 
-    for name, connector_fn, source_key in scraping_connectors:
+    for name, connector_fn, source_key in static_connectors:
         if source_key in covered_sources:
             log(f"⏭️  {name} : déjà récupéré via Gmail, ignoré")
             continue
@@ -50,7 +52,28 @@ def run_collection(state, log):
         except Exception as e:
             log(f"❌ {name} : erreur — {e}")
 
-    # ── 3. Résumé ─────────────────────────────────────────────
+    # ── 3. Connecteurs dynamiques ──────────────────────────────
+    dynamic_connectors = load_dynamic_connectors()
+    enabled = [c for c in dynamic_connectors if c.get("enabled", True)]
+
+    if enabled:
+        log(f"🔌 {len(enabled)} connecteur(s) dynamique(s) à interroger...")
+    for connector in enabled:
+        slug = connector["slug"]
+        name = connector["name"]
+        if slug in covered_sources:
+            log(f"⏭️  {name} : déjà récupéré via Gmail, ignoré")
+            continue
+        log(f"🔍 {name} : connexion à l'espace client...")
+        try:
+            invoices = collect_dynamic(connector, log)
+            for inv in invoices:
+                state["invoices"].append(inv)
+            log(f"✅ {name} : {len(invoices)} facture(s) récupérée(s)")
+        except Exception as e:
+            log(f"❌ {name} : erreur — {e}")
+
+    # ── 4. Résumé ──────────────────────────────────────────────
     total = len(state["invoices"])
     log(f"")
     log(f"📊 Collecte terminée : {total} facture(s) au total")
