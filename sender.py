@@ -15,6 +15,7 @@ Note : utilisez un "mot de passe d'application" Gmail, pas votre mot de passe Go
 
 import os
 import smtplib
+import traceback
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
@@ -33,9 +34,9 @@ def send_to_pennylane(invoices, log):
         )
 
     log(f"📤 Envoi de {len(invoices)} facture(s) vers Pennylane...")
+    log(f"   Expéditeur : {smtp_email}")
+    log(f"   Destinataire : {pennylane_email}")
 
-    # On groupe toutes les factures dans un seul email
-    # (ou plusieurs emails si beaucoup de factures — limite ~25 Mo par email)
     batches = _batch_invoices(invoices, max_size_mb=20)
     log(f"   {len(batches)} email(s) à envoyer")
 
@@ -59,6 +60,7 @@ def send_to_pennylane(invoices, log):
         except Exception as e:
             errors.append(str(e))
             log(f"   ❌ Erreur batch {i} : {e}")
+            log(f"   ❌ Détail : {traceback.format_exc()}")
 
     log("")
     log(f"📊 Résumé : {sent_count}/{len(invoices)} facture(s) envoyée(s) à Pennylane")
@@ -103,9 +105,13 @@ def _send_email_batch(smtp_email, smtp_password, to, batch, batch_num, total_bat
         part.add_header("Content-Disposition", f'attachment; filename="{safe_name}"')
         msg.attach(part)
 
+    log(f"   Connexion SMTP en cours...")
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        log(f"   Authentification...")
         server.login(smtp_email, smtp_password)
+        log(f"   Envoi en cours...")
         server.sendmail(smtp_email, to, msg.as_string())
+        log(f"   Email {batch_num}/{total_batches} envoyé ✓")
 
 
 def _batch_invoices(invoices, max_size_mb=20):
