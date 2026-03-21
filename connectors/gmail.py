@@ -80,7 +80,7 @@ def collect_gmail(log, days_back=60):
 
     # Requête Gmail : emails avec pièces jointes PDF des X derniers jours
     after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
-    query = f"has:attachment filename:pdf after:{after_date}"
+    query = f"has:attachment filename:pdf after:{after_date} -in:sent" 
 
     log(f"   Recherche : {query}")
 
@@ -115,6 +115,7 @@ def collect_gmail(log, days_back=60):
         # Récupère les pièces jointes PDF
         parts = msg.get("payload", {}).get("parts", [])
         for part in parts:
+            log(f"   DEBUG part: mimeType={part.get('mimeType')} filename={part.get('filename')} size={part.get('body',{}).get('size')}")
             mime = part.get("mimeType", "")
             filename = part.get("filename", "")
             if "pdf" not in mime.lower() and not filename.lower().endswith(".pdf"):
