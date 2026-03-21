@@ -16,7 +16,7 @@ def run_collection(state, log):
     # ── 1. Gmail ──────────────────────────────────────────────
     log("📧 Scan de Gmail...")
     try:
-        gmail_invoices = collect_gmail(log, days_back=365)
+        gmail_invoices = collect_gmail(log, days_back=4000)
         for inv in gmail_invoices:
             state["invoices"].append(inv)
         log(f"✅ Gmail : {len(gmail_invoices)} facture(s) trouvée(s)")
