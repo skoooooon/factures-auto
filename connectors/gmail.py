@@ -30,8 +30,20 @@ UPLOAD_FOLDER = "uploads"
 INVOICE_KEYWORDS = [
     "facture", "invoice", "reçu", "receipt", "confirmation de paiement",
     "votre commande", "your order", "ticket", "justificatif",
-    "votre facture", "avis d'échéance", "relevé", "quittance",
+    "votre facture", "avis d'échéance", "quittance",
     "order confirmation", "your invoice", "payment confirmation",
+]
+
+# Mots-clés à exclure dans l'objet
+EXCLUDE_KEYWORDS = [
+    "relevé", "releve", "statement", "avis de virement",
+    "avis de prélèvement", "votre virement", "notification",
+    "alerte", "information", "newsletter", "confirmation de connexion",
+]
+
+# Expéditeurs bancaires à exclure
+EXCLUDE_SENDERS = [
+
 ]
 
 def get_gmail_service():
@@ -68,8 +80,20 @@ def collect_gmail(log, days_back=60):
     query = f"has:attachment filename:pdf after:{after_date}"
 
     log(f"   Recherche : {query}")
-    results = service.users().messages().list(userId="me", q=query, maxResults=100).execute()
-    messages = results.get("messages", [])
+
+    # Pagination pour récupérer tous les résultats (pas de limite à 100)
+    messages = []
+    page_token = None
+    while True:
+        params = {"userId": "me", "q": query, "maxResults": 100}
+        if page_token:
+            params["pageToken"] = page_token
+        results = service.users().messages().list(**params).execute()
+        messages.extend(results.get("messages", []))
+        page_token = results.get("nextPageToken")
+        if not page_token:
+            break
+
     log(f"   {len(messages)} email(s) avec PDF trouvés")
 
     for msg_ref in messages:
@@ -111,14 +135,14 @@ def collect_gmail(log, days_back=60):
             with open(path, "wb") as f:
                 f.write(data)
 
-            # Détection de la source (ex: "total" si l'expéditeur est Total)
+            # Détection de la source
             source = _detect_source(sender)
 
             invoices.append({
                 "id": inv_id,
                 "name": filename,
                 "date": _parse_date(date_str),
-                "amount": "—",  # Extraction montant = futur bonus
+                "amount": "—",
                 "source": source,
                 "sender": sender,
                 "path": path,
@@ -137,6 +161,13 @@ def _get_header(msg, name):
 
 def _is_invoice(subject, sender):
     text = (subject + " " + sender).lower()
+    # Exclure les expéditeurs bancaires
+    if any(ex in text for ex in EXCLUDE_SENDERS):
+        return False
+    # Exclure les objets non liés aux factures
+    if any(ex in subject.lower() for ex in EXCLUDE_KEYWORDS):
+        return False
+    # Doit contenir un mot-clé de facturation
     return any(kw in text for kw in INVOICE_KEYWORDS)
 
 def _detect_source(sender):
@@ -150,6 +181,7 @@ def _detect_source(sender):
         "orange": "orange",
         "sfr": "sfr",
         "bouygues": "bouygues",
+        "boulanger": "boulanger",
     }
     for key, val in sources.items():
         if key in sender_lower:
@@ -159,7 +191,6 @@ def _detect_source(sender):
 def _parse_date(date_str):
     """Tente de parser la date de l'email en format lisible."""
     try:
-        # Format RFC 2822 courant : "Mon, 01 Jan 2024 12:00:00 +0000"
         from email.utils import parsedate_to_datetime
         dt = parsedate_to_datetime(date_str)
         return dt.strftime("%d/%m/%Y")
