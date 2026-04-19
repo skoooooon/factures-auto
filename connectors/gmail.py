@@ -89,15 +89,18 @@ def _sanitize_filename(filename, fallback):
         filename += ".pdf"
     return filename
 
-def collect_gmail(log, days_back=60):
-    """
-    Scanne les X derniers jours de Gmail et récupère les PDFs de facturation.
-    """
+def collect_gmail(log, date_from=None, date_to=None, days_back=60):
     service = get_gmail_service()
     invoices = []
 
-    after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
-    query = f"has:attachment filename:pdf after:{after_date} -in:sent"
+    if date_from and date_to:
+        after_date = date_from.strftime("%Y/%m/%d")
+        before_date = date_to.strftime("%Y/%m/%d")
+        query = f"has:attachment filename:pdf after:{after_date} before:{before_date} -in:sent"
+    else:
+        from datetime import timedelta
+        after_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y/%m/%d")
+        query = f"has:attachment filename:pdf after:{after_date} -in:sent"
 
     log(f"   Recherche : {query}")
 

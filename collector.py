@@ -1,27 +1,26 @@
-import os
-import json
-from connectors.gmail import collect_gmail
-from connectors.total import collect_total
-from connectors.aprr import collect_aprr
-from connectors.easyjet import collect_easyjet
-from connectors.dynamic import collect_dynamic
+from datetime import datetime
+import calendar
 
-CONNECTORS_FILE = "connectors_config.json"
+def run_collection(state, log, month=None, year=None):
+    """
+    month/year : int (ex: month=3, year=2026). Si None, utilise le mois en cours.
+    """
+    if not month or not year:
+        now = datetime.now()
+        month, year = now.month, now.year
 
-def load_dynamic_connectors():
-    if os.path.exists(CONNECTORS_FILE):
-        with open(CONNECTORS_FILE, "r") as f:
-            return json.load(f)
-    return []
+    # Calcul des dates de début et fin du mois
+    first_day = datetime(year, month, 1)
+    last_day = datetime(year, month, calendar.monthrange(year, month)[1])
 
-def run_collection(state, log):
-    log("🚀 Démarrage de la collecte...")
+    log(f"🚀 Démarrage de la collecte...")
+    log(f"   Période : {first_day.strftime('%d/%m/%Y')} → {last_day.strftime('%d/%m/%Y')}")
     os.makedirs("uploads", exist_ok=True)
 
     # ── 1. Gmail ──────────────────────────────────────────────
     log("📧 Scan de Gmail...")
     try:
-        gmail_invoices = collect_gmail(log, days_back=21)
+        gmail_invoices = collect_gmail(log, date_from=first_day, date_to=last_day)
         for inv in gmail_invoices:
             state["invoices"].append(inv)
         log(f"✅ Gmail : {len(gmail_invoices)} facture(s) trouvée(s)")
@@ -34,9 +33,10 @@ def run_collection(state, log):
 
     # ── 2. Connecteurs statiques ───────────────────────────────
     static_connectors = [
-        ("Total",   collect_total,   "total"),
-        ("APRR",    collect_aprr,    "aprr"),
-        ("EasyJet", collect_easyjet, "easyjet"),
+        ("Total",     collect_total,     "total"),
+        ("APRR",      collect_aprr,      "aprr"),
+        ("EasyJet",   collect_easyjet,   "easyjet"),
+        ("Boulanger", collect_boulanger, "boulanger"),
     ]
 
     for name, connector_fn, source_key in static_connectors:
@@ -55,9 +55,8 @@ def run_collection(state, log):
     # ── 3. Connecteurs dynamiques ──────────────────────────────
     dynamic_connectors = load_dynamic_connectors()
     enabled = [c for c in dynamic_connectors if c.get("enabled", True)]
-
     if enabled:
-        log(f"🔌 {len(enabled)} connecteur(s) dynamique(s) à interroger...")
+        log(f"🔌 {len(enabled)} connecteur(s) dynamique(s)...")
     for connector in enabled:
         slug = connector["slug"]
         name = connector["name"]

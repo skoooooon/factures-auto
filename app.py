@@ -69,13 +69,18 @@ def index():
 def collect():
     if state["collecting"]:
         return jsonify({"error": "Collecte déjà en cours"}), 400
+
+    data = request.get_json() or {}
+    month = data.get("month")
+    year = data.get("year")
+
     state["collecting"] = True
     state["logs"] = []
     state["invoices"] = []
 
     def run():
         try:
-            run_collection(state, log)
+            run_collection(state, log, month=month, year=year)
         finally:
             state["collecting"] = False
 

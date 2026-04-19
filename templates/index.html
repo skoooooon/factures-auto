@@ -132,6 +132,24 @@
     <div class="step-card" data-num="01">
       <div class="step-title">Collecter</div>
       <div class="step-desc">Scanne Gmail et les espaces clients pour récupérer les PDFs.</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <select id="sel-month" class="form-input" style="flex:1;padding:6px 10px;font-size:12px">
+          <option value="1">Janvier</option>
+          <option value="2">Février</option>
+          <option value="3">Mars</option>
+          <option value="4">Avril</option>
+          <option value="5">Mai</option>
+          <option value="6">Juin</option>
+          <option value="7">Juillet</option>
+          <option value="8">Août</option>
+          <option value="9">Septembre</option>
+          <option value="10">Octobre</option>
+          <option value="11">Novembre</option>
+          <option value="12">Décembre</option>
+        </select>
+        <select id="sel-year" class="form-input" style="width:90px;padding:6px 10px;font-size:12px">
+        </select>
+      </div>
       <button class="btn btn-collect" id="btn-collect" onclick="startCollect()">
         <span class="spinner" id="spin-collect"></span>
         Lancer la collecte
@@ -248,13 +266,32 @@
   });
 
   // ── Collect ───────────────────────────────────────────────
-  async function startCollect() {
-    const res = await fetch('/api/collect', { method: 'POST' });
-    if (!res.ok) { const d = await res.json(); alert(d.error); return; }
-    setLoading('collect', true);
-    document.getElementById('btn-send').disabled = true;
-    startPolling();
+// Init sélecteurs mois/année
+function initDateSelectors() {
+  const now = new Date();
+  const yearSel = document.getElementById('sel-year');
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    yearSel.appendChild(opt);
   }
+  document.getElementById('sel-month').value = now.getMonth() + 1;
+}
+
+async function startCollect() {
+  const month = parseInt(document.getElementById('sel-month').value);
+  const year = parseInt(document.getElementById('sel-year').value);
+  const res = await fetch('/api/collect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ month, year }),
+  });
+  if (!res.ok) { const d = await res.json(); alert(d.error); return; }
+  setLoading('collect', true);
+  document.getElementById('btn-send').disabled = true;
+  startPolling();
+}
 
   // ── Send ──────────────────────────────────────────────────
   async function startSend() {
@@ -456,6 +493,7 @@
   // Init
   updateStats([]);
   loadConnectors();
+  initDateSelectors();
 </script>
 </body>
 </html>
