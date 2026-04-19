@@ -1,15 +1,27 @@
-from datetime import datetime
+import os
+import json
 import calendar
+from datetime import datetime
+from connectors.gmail import collect_gmail
+from connectors.total import collect_total
+from connectors.aprr import collect_aprr
+from connectors.easyjet import collect_easyjet
+from connectors.boulanger import collect_boulanger
+from connectors.dynamic import collect_dynamic
+
+CONNECTORS_FILE = "connectors_config.json"
+
+def load_dynamic_connectors():
+    if os.path.exists(CONNECTORS_FILE):
+        with open(CONNECTORS_FILE, "r") as f:
+            return json.load(f)
+    return []
 
 def run_collection(state, log, month=None, year=None):
-    """
-    month/year : int (ex: month=3, year=2026). Si None, utilise le mois en cours.
-    """
     if not month or not year:
         now = datetime.now()
         month, year = now.month, now.year
 
-    # Calcul des dates de début et fin du mois
     first_day = datetime(year, month, 1)
     last_day = datetime(year, month, calendar.monthrange(year, month)[1])
 
