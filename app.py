@@ -73,6 +73,7 @@ def collect():
     data = request.get_json() or {}
     month = data.get("month")
     year = data.get("year")
+    active_sources = data.get("active_sources", ["gmail"])
 
     state["collecting"] = True
     state["logs"] = []
@@ -80,7 +81,7 @@ def collect():
 
     def run():
         try:
-            run_collection(state, log, month=month, year=year)
+            run_collection(state, log, month=month, year=year, active_sources=active_sources)
         finally:
             state["collecting"] = False
 

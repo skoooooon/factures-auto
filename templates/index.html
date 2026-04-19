@@ -150,6 +150,26 @@
         <select id="sel-year" class="form-input" style="width:90px;padding:6px 10px;font-size:12px">
         </select>
       </div>
+      <div style="margin-bottom:12px">
+        <div class="section-label" style="margin-bottom:8px">Sources</div>
+        <div style="display:flex;flex-direction:column;gap:6px" id="sources-list">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-muted)">
+            <input type="checkbox" class="toggle-check" id="src-gmail" checked> Gmail
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-muted)">
+            <input type="checkbox" class="toggle-check" id="src-total"> Total
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-muted)">
+            <input type="checkbox" class="toggle-check" id="src-aprr"> APRR
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-muted)">
+            <input type="checkbox" class="toggle-check" id="src-easyjet"> EasyJet
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-muted)">
+            <input type="checkbox" class="toggle-check" id="src-boulanger"> Boulanger
+          </label>
+        </div>
+      </div>
       <button class="btn btn-collect" id="btn-collect" onclick="startCollect()">
         <span class="spinner" id="spin-collect"></span>
         Lancer la collecte
@@ -282,10 +302,26 @@ function initDateSelectors() {
 async function startCollect() {
   const month = parseInt(document.getElementById('sel-month').value);
   const year = parseInt(document.getElementById('sel-year').value);
+
+  // Récupère les sources cochées
+  const active_sources = [];
+  document.querySelectorAll('#sources-list input[type="checkbox"]').forEach(cb => {
+    if (cb.checked) active_sources.push(cb.id.replace('src-', ''));
+  });
+  // Ajoute les connecteurs dynamiques actifs
+  document.querySelectorAll('.conn-checkbox:checked').forEach(cb => {
+    active_sources.push(cb.dataset.slug);
+  });
+
+  if (active_sources.length === 0) {
+    alert('Sélectionnez au moins une source.');
+    return;
+  }
+
   const res = await fetch('/api/collect', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ month, year }),
+    body: JSON.stringify({ month, year, active_sources }),
   });
   if (!res.ok) { const d = await res.json(); alert(d.error); return; }
   setLoading('collect', true);
@@ -403,25 +439,39 @@ async function startCollect() {
   }
 
   function renderConnectors(connectors) {
-    const el = document.getElementById('connector-list');
-    if (!connectors.length) {
-      el.innerHTML = `<div class="empty-state" style="padding:20px"><p>Aucun espace client configuré.</p><p class="empty-sub">Cliquez sur "Ajouter un service" pour commencer.</p></div>`;
-      return;
-    }
-    el.innerHTML = connectors.map(c => `
-      <div class="connector-card ${c.enabled === false ? 'disabled' : ''}" id="conn-${c.id}">
-        <div class="connector-info">
-          <div class="connector-name">${escHtml(c.name)}</div>
-          <div class="connector-url">${escHtml(c.invoices_url)}</div>
-        </div>
-        <div class="connector-actions">
-          <button class="btn btn-ghost btn-sm" onclick="toggleConnector('${c.id}')">
-            ${c.enabled === false ? 'Activer' : 'Désactiver'}
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="deleteConnector('${c.id}')">✕</button>
-        </div>
-      </div>`).join('');
+  const el = document.getElementById('connector-list');
+  if (!connectors.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:20px"><p>Aucun espace client configuré.</p><p class="empty-sub">Cliquez sur "Ajouter un service" pour commencer.</p></div>`;
+    // Retire les éventuelles checkboxes dynamiques de la liste sources
+    document.querySelectorAll('.dyn-source-label').forEach(l => l.remove());
+    return;
   }
+  el.innerHTML = connectors.map(c => `
+    <div class="connector-card ${c.enabled === false ? 'disabled' : ''}" id="conn-${c.id}">
+      <div class="connector-info">
+        <div class="connector-name">${escHtml(c.name)}</div>
+        <div class="connector-url">${escHtml(c.invoices_url)}</div>
+      </div>
+      <div class="connector-actions">
+        <button class="btn btn-ghost btn-sm" onclick="toggleConnector('${c.id}')">
+          ${c.enabled === false ? 'Activer' : 'Désactiver'}
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="deleteConnector('${c.id}')">✕</button>
+      </div>
+    </div>`).join('');
+
+  // Synchronise les checkboxes dynamiques dans la liste sources
+  document.querySelectorAll('.dyn-source-label').forEach(l => l.remove());
+  const sourcesList = document.getElementById('sources-list');
+  connectors.forEach(c => {
+    if (c.enabled === false) return;
+    const label = document.createElement('label');
+    label.className = 'dyn-source-label';
+    label.style = 'display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-muted)';
+    label.innerHTML = `<input type="checkbox" class="toggle-check conn-checkbox" data-slug="${c.slug}"> ${escHtml(c.name)}`;
+    sourcesList.appendChild(label);
+  });
+}
 
   async function toggleConnector(id) {
     await fetch(`/api/connectors/${id}/toggle`, { method: 'POST' });
